@@ -45,10 +45,11 @@ for po in po/*.po; do
     install -d "$dir"
     msgfmt --check -o "$dir/%{plugin_id}.mo" "$po"
 done
-# Generate the per-locale file list from the compiled .mo files already
-# staged into %%{buildroot}. %%find_lang scans for .mo/.qm files under
-# common locale paths and writes their absolute paths to %%{name}.lang.
-%find_lang %{plugin_id}
+# Generate the per-locale file list. %%find_lang only scans standard
+# %%{_datadir}/locale paths, but KWin scripts install translations under
+# contents/locale/, so we build %%{name}.lang manually with find.
+find %{buildroot}%{_datadir}/kwin/scripts/%{plugin_id}/contents/locale -type f -name '*.mo' -o -name '*.qm' \
+    | sed "s|%{buildroot}||" > %{name}.lang
 
 %files -f %{name}.lang
 %{_datadir}/kwin/scripts/%{plugin_id}/metadata.json
