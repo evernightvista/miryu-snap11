@@ -1,0 +1,157 @@
+# Translation template for Snap11.
+# SPDX-License-Identifier: MIT
+msgid ""
+msgstr ""
+"Project-Id-Version: snap11\n"
+"POT-Creation-Date: 2026-11-24 20:30+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: miryu-snap11/contents/ui/config.ui:10
+msgid "Behavior"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:14
+msgid ""
+"Important: turn off KDE's own edge snapping, or both will show. System Settings > Screen Edges: turn off \"Maximize: Drag windows to top edge\" and \"Tile: Drag windows to the left or right edge\"."
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:23
+msgid "Snap Assist after edge snapping"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:27
+msgid "Drag a window to the left or right screen edge. The other windows then show up as thumbnails in the free half."
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:36
+msgid "Edge snapping"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:40
+msgid "Snap11 snaps windows dragged to the left or right screen edge itself, with its own outline. For that, turn off KDE's own edge tiling (System Settings > Screen Edges), or both will show."
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:48
+msgid "Snap at the outer screen edges"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:53
+msgid "Snap at the edges between monitors"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:58
+msgid "Snap to a quarter near the corners"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:63
+msgid "Next to a snapped window, fill the space that is left"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:68
+msgid "Snap zone width:"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:75
+msgid " px"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:80
+msgid "Restore a window's size when you drag it out of a snap"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:91
+msgid "Snap layout bar at the top edge"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:95
+msgid "Like Windows 11: when you drag a window, a small bar slides in at the top of the screen. Drag the window onto it to see the layouts, and drop it on the zone where it should go."
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:103
+msgid "50 / 50"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:108
+msgid "66 / 33"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:113
+msgid "33 / 33 / 33"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:118
+msgid "50 + two quarters"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:123
+msgid "Quarters"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:128
+msgid "25 / 50 / 25"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:133
+msgid "33 / 66 (not in Windows)"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:138
+msgid "Three-column layouts only on wide screens (1920 px and up), like Windows"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:143
+msgid "Offer windows for the other zones afterwards"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:148
+msgid "Use KDE's tiles, so windows share resize borders (replaces the tile editor's layout on that screen)"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:158
+msgid "Top edge"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:164
+msgid "Maximize when dropped at the top edge"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:169
+msgid "Trigger distance from the top edge:"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:186
+msgid "Window picker"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:192
+msgid "Include minimized windows"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:197
+msgid "Only windows from the same screen"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:213
+msgid "Appearance"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:217
+msgid "Sizes"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:221
+msgid "Snap11 looks like Windows 11. Light or dark and the accent color follow your system settings, like in Windows."
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:229
+msgid "Layout width in the snap bar:"
+msgstr ""
+
+#: miryu-snap11/contents/ui/config.ui:241
+msgid "Maximum thumbnail width in Snap Assist:"
+msgstr ""

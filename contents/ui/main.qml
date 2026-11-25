@@ -1,0 +1,1171 @@
+/*
+ * Snap11 - Windows 11 style snapping for KWin 6 (Wayland).
+ *
+ * Snap Assist after edge snapping:
+ *   - Drag a window to the left/right screen edge. KDE's own quick tiling
+ *     snaps it to that half.
+ *   - Once the drag ends, we check whether the window now fills a half of
+ *     its screen. If so, thumbnails of the other windows appear in the free
+ *     half. Clicking one quick-tiles it there.
+ *
+ * Snap layout bar, like Windows 11:
+ *   - As soon as a window is dragged, a small bar slides in at the top
+ *     center. Drag the window onto it and it opens up with Windows' layouts.
+ *     Drop the window on a zone and it lands there; then Snap Assist offers
+ *     windows for the other zones, one zone after the other.
+ *   - Dropping right at the top edge, but not on a zone, maximizes.
+ *   - Needs KDE's "drag to top edge maximizes" turned off
+ *     (kwinrc [Windows] ElectricBorderMaximize=false).
+ *
+ * In the picker, Escape or a click on empty space closes it.
+ *
+ * Debug output: journalctl --user -f | grep snap11
+ */
+import QtQuick
+import QtQml
+import org.kde.kwin
+
+Item {
+    id: root
+
+    // Slack in px when comparing a window's geometry to a half of the screen.
+    // Native quick tiles are inset by the tile padding (4px in kwinrc).
+    readonly property int tolerance: 24
+    // How close (px) the cursor must get to the top edge to open the bar.
+    readonly property int topTrigger: cfg.topTrigger
+
+    // Development only: reload.sh test flips this in its copy, so the
+    // overlays open by themselves after loading and can be screenshotted.
+    readonly property bool selfTest: false
+    // Development only: reload.sh demo fills this with window classes. The
+    // self test then runs on the smallest screen and only uses these
+    // windows, so screenshots show nothing private.
+    readonly property var demoClasses: []
+
+    // Whether a window's current interactive operation is a move (not a
+    // resize), keyed by internalId. Filled on drag start, read on drag end.
+    property var moveStarted: ({})
+    // Window whose drag just ended; checked after a short settle delay.
+    property var pendingWindow: null
+    // Drop on a bar slot (or maximize), applied right after the drag ended.
+    property var pendingDrop: null
+    // Cursor is at the top edge but not on a bar slot: dropping maximizes.
+    property bool maximizeArmed: false
+    // The cursor sits in the snap zone at an inner screen edge (where two
+    // monitors meet): { slot, others }, or null.
+    property var edgeArmed: null
+
+    // Snap Assist chain: slots still to fill, and windows already placed
+    // (they are not offered again).
+    property var assistQueue: []
+    property var assistPlaced: []
+
+    function log(msg) {
+        console.info("snap11: " + msg);
+    }
+
+    function isNormal(w) {
+        return w && w.normalWindow && !w.skipTaskbar && !w.specialWindow
+            && w.moveable && w.resizeable;
+    }
+
+    function onCurrentDesktop(w) {
+        if (w.onAllDesktops)
+            return true;
+        const cur = Workspace.currentDesktop;
+        for (let i = 0; i < w.desktops.length; i++) {
+            if (w.desktops[i] === cur)
+                return true;
+        }
+        return false;
+    }
+
+    // Usable area of a screen (without panels).
+    function workArea(output) {
+        return Workspace.clientArea(KWin.MaximizeArea, output, Workspace.currentDesktop);
+    }
+
+    // The whole screen, including panels.
+    function screenArea(output) {
+        return Workspace.clientArea(KWin.ScreenArea, output, Workspace.currentDesktop);
+    }
+
+    // KDE's quick tile layout (QuickRootTile) per screen and desktop. KDE
+    // remembers where the user dragged the split between two quick tiled
+    // windows, and every later quick tile uses it. A script reaches the
+    // root only through a quick tiled window (window.tile.parent), so we
+    // keep each one we have seen.
+    property var quickRoots: ({})
+
+    function quickKey(output) {
+        const d = Workspace.currentDesktop;
+        return output.name + "/" + (d && d.id !== undefined ? d.id : d);
+    }
+
+    function noteQuickTile(w) {
+        if (isQuickTiled(w) && w.tile.parent && w.output)
+            quickRoots[quickKey(w.output)] = w.tile.parent;
+    }
+
+    // KDE's split on a screen as fractions of its work area, Qt.point(x, y);
+    // 0.5 (KDE's default) until we have seen a quick tile there.
+    function quickSplit(output) {
+        const split = Qt.point(0.5, 0.5);
+        if (!output)
+            return split;
+        const stack = Workspace.stackingOrder;
+        for (let i = 0; i < stack.length; i++) {
+            if (stack[i].output === output && onCurrentDesktop(stack[i]))
+                noteQuickTile(stack[i]);
+        }
+        const root = quickRoots[quickKey(output)];
+        try {
+            const kids = root ? root.tiles || [] : [];
+            // The left half (full height, at x 0) ends at the vertical
+            // split; the top half (full width, at y 0) at the horizontal one.
+            for (let i = 0; i < kids.length; i++) {
+                const r = kids[i].relativeGeometry;
+                if (!r || r.x > 0.001 || r.y > 0.001)
+                    continue;
+                if (r.height > 0.999 && r.width > 0.05 && r.width < 0.95)
+                    split.x = r.width;
+                else if (r.width > 0.999 && r.height > 0.05 && r.height < 0.95)
+                    split.y = r.height;
+            }
+        } catch (e) {
+            // The root went away with its screen.
+            delete quickRoots[quickKey(output)];
+        }
+        return split;
+    }
+
+    // Left and right half of work area a, split where KDE would quick tile
+    // (see quickSplit) when the screen is given.
+    function halves(area, output) {
+        const lw = Math.round(area.width * quickSplit(output).x);
+        return {
+            "left": Qt.rect(area.x, area.y, lw, area.height),
+            "right": Qt.rect(area.x + lw, area.y, area.width - lw, area.height)
+        };
+    }
+
+    function matches(g, r) {
+        const t = tolerance;
+        return Math.abs(g.x - r.x) <= t && Math.abs(g.y - r.y) <= t
+            && Math.abs(g.width - r.width) <= 2 * t && Math.abs(g.height - r.height) <= 2 * t;
+    }
+
+    // Other windows offered in the picker, topmost first. Minimized windows
+    // show their icon instead of a thumbnail. With "same screen only", only
+    // windows on the given output are offered.
+    function candidatesFor(excluded, output) {
+        const list = [];
+        const stack = Workspace.stackingOrder;
+        for (let i = stack.length - 1; i >= 0; i--) {
+            const w = stack[i];
+            // Our own overlays (pid -1, skipSwitcher) are not real windows.
+            if (excluded.indexOf(w) >= 0 || !isNormal(w) || !onCurrentDesktop(w)
+                    || w.skipSwitcher || w.pid <= 0)
+                continue;
+            if (!cfg.includeMinimized && w.minimized)
+                continue;
+            if (cfg.currentScreenOnly && output && w.output !== output)
+                continue;
+            list.push(w);
+        }
+        return list;
+    }
+
+    // Put a window into a slot. Halves use KDE's native quick tiling, so the
+    // shared resize handle between two tiled windows keeps working.
+    function place(w, slot) {
+        log("placing '" + w.caption + "' into " + (slot.quickTile || (slot.tile ? "KDE tile" : "custom slot")));
+        w.minimized = false;
+        rememberSize(w, slot);
+        // Leave any native tile first, or KWin snaps the window back (and a
+        // second quick tile to the same side would just untile it).
+        if (w.tile)
+            w.tile = null;
+        w.setMaximize(false, false);
+        if (slot.tile && !slot.quickTile) {
+            // A KDE custom tile: windows in neighbouring tiles share their
+            // resize borders.
+            w.frameGeometry = slot.rect;
+            w.tile = slot.tile;
+            Workspace.activeWindow = w;
+            log("  now at " + w.frameGeometry.x + "," + w.frameGeometry.y + " on " + w.output.name);
+            return;
+        }
+        if (slot.quickTile) {
+            // Quick tiling works on the window's current screen, so bring it
+            // to the slot's screen first, but at its own size: KDE remembers
+            // the size it had right before tiling.
+            const size = presnap[w.internalId.toString()];
+            const g = w.frameGeometry;
+            const ww = Math.min(size ? size.width : g.width, slot.rect.width);
+            const wh = Math.min(size ? size.height : g.height, slot.rect.height);
+            w.frameGeometry = Qt.rect(Math.round(slot.rect.x + (slot.rect.width - ww) / 2),
+                                      Math.round(slot.rect.y + (slot.rect.height - wh) / 2), ww, wh);
+        } else {
+            w.frameGeometry = slot.rect;
+        }
+        Workspace.activeWindow = w;
+        const quickTile = {
+            "left": Workspace.slotWindowQuickTileLeft,
+            "right": Workspace.slotWindowQuickTileRight,
+            "topLeft": Workspace.slotWindowQuickTileTopLeft,
+            "topRight": Workspace.slotWindowQuickTileTopRight,
+            "bottomLeft": Workspace.slotWindowQuickTileBottomLeft,
+            "bottomRight": Workspace.slotWindowQuickTileBottomRight
+        }[slot.quickTile];
+        if (quickTile)
+            quickTile.call(Workspace);
+        log("  now at " + w.frameGeometry.x + "," + w.frameGeometry.y + " on " + w.output.name);
+    }
+
+    // KWin maximizes a window on the screen under its center. Bring it
+    // over to screen s first (centered, at its own size), so it maximizes
+    // where the preview was.
+    function moveToScreen(w, s) {
+        if (!s || w.output === s)
+            return;
+        const a = workArea(s);
+        const g = w.frameGeometry;
+        const ww = Math.min(g.width, a.width);
+        const wh = Math.min(g.height, a.height);
+        w.frameGeometry = Qt.rect(Math.round(a.x + (a.width - ww) / 2), Math.round(a.y + (a.height - wh) / 2), ww, wh);
+    }
+
+    // Size of each window before we snapped it, keyed by internalId:
+    // { width, height, rect } where rect is the slot it was snapped to.
+    // Dragging the window out of that slot gives it its old size back.
+    property var presnap: ({})
+
+    function rememberSize(w, slot) {
+        const id = w.internalId.toString();
+        const e = presnap[id];
+        // Moving from one snap to another: keep the size from before the
+        // first snap.
+        if (e && matches(w.frameGeometry, e.rect)) {
+            e.rect = slot.rect;
+            return;
+        }
+        const g = w.frameGeometry;
+        presnap[id] = { "width": g.width, "height": g.height, "rect": slot.rect };
+    }
+
+    // On drag start: a window still sitting in the slot we snapped it to
+    // gets its old size back, placed so the cursor keeps its spot on the
+    // title bar (same horizontal ratio).
+    function restoreSize(w) {
+        const id = w.internalId.toString();
+        const e = presnap[id];
+        if (!e)
+            return;
+        delete presnap[id];
+        const g = w.frameGeometry;
+        if (!cfg.restoreSize || !matches(g, e.rect))
+            return; // turned off, or moved or resized since
+        const c = Workspace.cursorPos;
+        const ratio = Math.max(0, Math.min(1, (c.x - g.x) / Math.max(1, g.width)));
+        if (w.tile)
+            w.tile = null;
+        w.frameGeometry = Qt.rect(Math.round(c.x - ratio * e.width), g.y, e.width, e.height);
+        log("restored size of '" + w.caption + "' to " + e.width + "x" + e.height);
+    }
+
+    // Offer windows for each slot in the queue, one slot after the other.
+    function startAssist(slots, placed) {
+        assistQueue = slots;
+        assistPlaced = placed;
+        assistNext();
+    }
+
+    // Is a slot already taken by a window that fills it (snapped there)?
+    // Like Windows, Snap Assist does not open over such a slot.
+    function slotFilled(slot) {
+        const stack = Workspace.stackingOrder;
+        for (let i = 0; i < stack.length; i++) {
+            const w = stack[i];
+            if (!isNormal(w) || w.minimized || w.pid <= 0 || !onCurrentDesktop(w))
+                continue;
+            if (matches(w.frameGeometry, slot.rect))
+                return true;
+        }
+        return false;
+    }
+
+    function assistNext() {
+        // Skip slots that are already filled.
+        while (assistQueue.length > 0 && slotFilled(assistQueue[0])) {
+            log("slot already filled, no assist there");
+            assistQueue = assistQueue.slice(1);
+        }
+        if (assistQueue.length === 0) {
+            hidePlaceholders();
+            return;
+        }
+        const slot = assistQueue[0];
+        assistQueue = assistQueue.slice(1);
+        const cands = candidatesFor(assistPlaced, slot.output);
+        log("assist for next slot, " + cands.length + " candidates, " + assistQueue.length + " slots after this");
+        if (cands.length > 0) {
+            // Like Windows, the zones still to fill after this one show as
+            // empty placeholders.
+            openAssist(slot, cands, assistQueue.filter(function(s) { return !slotFilled(s); }));
+        } else {
+            assistQueue = [];
+            hidePlaceholders();
+        }
+    }
+
+    // Called shortly after a drag ended: did the window land in a half?
+    function checkSnapped(w) {
+        if (!cfg.edgeAssist || !isNormal(w))
+            return;
+        const h = halves(workArea(w.output), w.output);
+        const g = w.frameGeometry;
+        let slot = null;
+        if (matches(g, h.left))
+            slot = { "rect": h.right, "quickTile": "right", "output": w.output };
+        else if (matches(g, h.right))
+            slot = { "rect": h.left, "quickTile": "left", "output": w.output };
+        if (!slot) {
+            log("drag ended, not a half: " + g.x + "," + g.y + " " + g.width + "x" + g.height);
+            return;
+        }
+        log("'" + w.caption + "' snapped to a half");
+        startAssist([slot], [w]);
+    }
+
+    // Windows we watch for drags. A plain JS array, reassigned on change so
+    // the Instantiator below rebuilds its per-window Connections. Using
+    // Connections (instead of signal.connect) means everything disconnects
+    // cleanly when the script is unloaded.
+    property var watched: []
+
+    function refreshWatched() {
+        const list = [];
+        const stack = Workspace.stackingOrder;
+        for (let i = 0; i < stack.length; i++) {
+            if (stack[i].normalWindow)
+                list.push(stack[i]);
+        }
+        watched = list;
+    }
+
+    function dragStarted(w) {
+        // Settings are applied while the script keeps running: re-read them
+        // before the drag uses them.
+        cfg.load();
+        root.moveStarted[w.internalId.toString()] = w.move;
+        if (w.move) {
+            restoreSize(w);
+            // Like Windows 11: the snap bar slides in, collapsed, as soon as
+            // a window is dragged.
+            if (isNormal(w))
+                showBar(screenAt(Workspace.cursorPos) || w.output);
+        }
+        if (assist.visible)
+            assist.dismiss("new drag");
+        assistQueue = [];
+        hidePlaceholders();
+    }
+
+    // Show the collapsed snap bar on screen s (or move it there).
+    function showBar(s) {
+        const a = workArea(s);
+        if (cfg.layoutBar && bar.layoutsFor(a.width).length > 0) {
+            bar.quickSplit = quickSplit(s);
+            bar.showOn(a, s);
+        }
+        else
+            bar.hide();
+    }
+
+    // While moving: snap at the side edges and corners, open the bar when
+    // the cursor reaches it and track the zone under it, and maximize right
+    // at the top edge away from the bar, like KDE and Windows do.
+    function dragStepped(w) {
+        if (!root.moveStarted[w.internalId.toString()] || !isNormal(w))
+            return;
+        const p = Workspace.cursorPos;
+        const s = screenAt(p) || w.output;
+        // The bar follows the cursor to another screen.
+        if (bar.visible && bar.output !== s)
+            showBar(s);
+        // Left and right screen edges and their corners come first, also
+        // along the top edge, so a top corner snaps to a quarter like in
+        // Windows instead of maximizing.
+        const outlineWasVisible = outline.visible;
+        const edge = edgeAt(p, w);
+        if (edge) {
+            maximizeArmed = false;
+            bar.track(p);
+            if (!edgeArmed || edgeArmed.slot.output !== edge.slot.output
+                    || edgeArmed.slot.quickTile !== edge.slot.quickTile)
+                outline.showAt(edge.slot.rect, workArea(edge.slot.output), w.frameGeometry, w.icon);
+            edgeArmed = edge;
+            keepBarOnTop(outlineWasVisible);
+            return;
+        }
+        if (edgeArmed) {
+            edgeArmed = null;
+            outline.hide();
+        }
+        bar.track(p);
+        const a = workArea(s);
+        const atTop = p.y <= screenArea(s).y + topTrigger;
+        root.maximizeArmed = cfg.maximizeAtTop && atTop && bar.hoveredSlot < 0;
+        if (bar.hoveredSlot >= 0)
+            outline.showAt(bar.slotRect(bar.hoveredLayout, bar.hoveredSlot), a, w.frameGeometry, w.icon);
+        else if (root.maximizeArmed)
+            outline.showAt(a, a, w.frameGeometry, w.icon);
+        else
+            outline.hide();
+        keepBarOnTop(outlineWasVisible);
+    }
+
+    // A freshly shown outline lands on top; keep the bar above it, like
+    // Windows.
+    function keepBarOnTop(outlineWasVisible) {
+        if (outline.visible && !outlineWasVisible && bar.visible)
+            bar.bringToFront();
+    }
+
+    function screenAt(p) {
+        const screens = Workspace.screens;
+        for (let i = 0; i < screens.length; i++) {
+            const g = screens[i].geometry;
+            if (p.x >= g.x && p.x < g.x + g.width && p.y >= g.y && p.y < g.y + g.height)
+                return screens[i];
+        }
+        return null;
+    }
+
+    // Is there another screen right next to s on that side, at height y?
+    function hasNeighbour(s, side, y) {
+        const g = s.geometry;
+        const screens = Workspace.screens;
+        for (let i = 0; i < screens.length; i++) {
+            if (screens[i] === s)
+                continue;
+            const o = screens[i].geometry;
+            if (y < o.y || y >= o.y + o.height)
+                continue;
+            if (side === "left" && Math.abs(o.x + o.width - g.x) <= 1)
+                return true;
+            if (side === "right" && Math.abs(o.x - (g.x + g.width)) <= 1)
+                return true;
+        }
+        return false;
+    }
+
+    // How far (px) from the top or bottom a side edge counts as a corner.
+    readonly property int cornerZone: 80
+
+    function quarters(area, output) {
+        const split = quickSplit(output);
+        const lw = Math.round(area.width * split.x);
+        const th = Math.round(area.height * split.y);
+        return {
+            "topLeft": Qt.rect(area.x, area.y, lw, th),
+            "topRight": Qt.rect(area.x + lw, area.y, area.width - lw, th),
+            "bottomLeft": Qt.rect(area.x, area.y + th, lw, area.height - th),
+            "bottomRight": Qt.rect(area.x + lw, area.y + th, area.width - lw, area.height - th)
+        };
+    }
+
+    // Snap target when p is in the snap zone along a left or right screen
+    // edge, else null: { slot, others }. Outer edges replace KDE's own edge
+    // tiling (so everything looks the same); inner edges, where two monitors
+    // meet, are something KDE does not do at all. Near the top or bottom of
+    // an edge, the window snaps to a quarter.
+    function edgeAt(p, dragged) {
+        const s = screenAt(p);
+        if (!s)
+            return null;
+        const g = s.geometry;
+        const zone = cfg.innerEdgeWidth;
+        let side = "";
+        if (p.x < g.x + zone)
+            side = "left";
+        else if (p.x >= g.x + g.width - zone)
+            side = "right";
+        if (!side)
+            return null;
+        const inner = hasNeighbour(s, side, p.y);
+        if (inner ? !cfg.innerEdgeSnap : !cfg.outerEdgeSnap)
+            return null;
+        const a = workArea(s);
+        let row = "";
+        if (cfg.cornerQuarters) {
+            if (p.y < g.y + cornerZone)
+                row = "top";
+            else if (p.y >= g.y + g.height - cornerZone)
+                row = "bottom";
+        }
+        if (row) {
+            const q = quarters(a, s);
+            const key = row + (side === "left" ? "Left" : "Right");
+            const others = [];
+            for (const k of ["topLeft", "topRight", "bottomLeft", "bottomRight"]) {
+                if (k !== key)
+                    others.push({ "rect": q[k], "quickTile": k, "output": s });
+            }
+            return { "slot": { "rect": q[key], "quickTile": key, "output": s }, "others": others };
+        }
+        const h = halves(a, s);
+        const other = side === "left" ? "right" : "left";
+        // Like Windows: next to a window already snapped on the other side,
+        // take exactly the space it leaves, and offer nothing afterwards.
+        const fill = cfg.fillSpace ? fillRect(a, side, dragged) : null;
+        if (fill)
+            return {
+                // Still a quick tile: the neighbour becomes one too, with
+                // KDE's split moved to where they meet (see tileNeighbour),
+                // so both share KDE's resize handle.
+                "slot": { "rect": fill.rect, "quickTile": side, "output": s, "neighbour": fill.neighbour },
+                "others": []
+            };
+        return {
+            "slot": { "rect": h[side], "quickTile": side, "output": s },
+            "others": [{ "rect": h[other], "quickTile": other, "output": s }]
+        };
+    }
+
+    // Is w snapped? Natively tiled by KDE (quick tiling, Meta+arrows), or
+    // put into a slot by Snap11 and still sitting there.
+    function isSnapped(w) {
+        if (w.tile)
+            return true;
+        const e = presnap[w.internalId.toString()];
+        return !!e && matches(w.frameGeometry, e.rect);
+    }
+
+    // Free part of work area a when snapping to side: the space up to the
+    // window snapped as a full-height column against the opposite edge.
+    // { rect, neighbour }, or null when there is no such window (or it
+    // leaves too little room).
+    function fillRect(a, side, dragged) {
+        const t = tolerance;
+        const stack = Workspace.stackingOrder;
+        // Topmost first: the one the user sees counts.
+        for (let i = stack.length - 1; i >= 0; i--) {
+            const w = stack[i];
+            if (w === dragged || !isNormal(w) || w.minimized || w.pid <= 0 || !onCurrentDesktop(w))
+                continue;
+            const g = w.frameGeometry;
+            const fullHeight = Math.abs(g.y - a.y) <= t
+                && Math.abs(g.y + g.height - (a.y + a.height)) <= t;
+            if (!fullHeight || g.width >= a.width - 2 * t || !isSnapped(w))
+                continue;
+            let r = null;
+            if (side === "left" && Math.abs(g.x + g.width - (a.x + a.width)) <= t && g.x > a.x + t)
+                r = Qt.rect(a.x, a.y, g.x - a.x, a.height);
+            else if (side === "right" && Math.abs(g.x - a.x) <= t && g.x + g.width < a.x + a.width - t)
+                r = Qt.rect(g.x + g.width, a.y, a.x + a.width - (g.x + g.width), a.height);
+            if (r && r.width >= a.width * 0.15)
+                return { "rect": r, "neighbour": w };
+        }
+        return null;
+    }
+
+    // KDE's custom tiles (the ones from the tile editor, Meta+T) for the
+    // current desktop on a screen.
+    function customRoot(output) {
+        try {
+            if (Workspace.rootTile)
+                return Workspace.rootTile(output, Workspace.currentDesktop);
+        } catch (e) {
+            log("rootTile failed: " + e);
+        }
+        const tm = Workspace.tilingForScreen ? Workspace.tilingForScreen(output) : null;
+        return tm ? tm.rootTile : null;
+    }
+
+    // Tiles without children, depth first.
+    function leafTiles(t) {
+        const kids = t.tiles || [];
+        if (kids.length === 0)
+            return [t];
+        let out = [];
+        for (let i = 0; i < kids.length; i++)
+            out = out.concat(leafTiles(kids[i]));
+        return out;
+    }
+
+    function rectOf(g) {
+        return Qt.rect(g.x, g.y, g.width, g.height);
+    }
+
+    // For each slot, the leaf tile that covers it, or null if one is missing.
+    function tilesForSlots(root, slots) {
+        const leaves = leafTiles(root);
+        const found = [];
+        for (let i = 0; i < slots.length; i++) {
+            let hit = null;
+            for (let j = 0; j < leaves.length && !hit; j++) {
+                if (matches(rectOf(leaves[j].absoluteGeometry), slots[i].rect))
+                    hit = leaves[j];
+            }
+            if (!hit)
+                return null;
+            found.push(hit);
+        }
+        return found;
+    }
+
+    // Move tile t's right (or bottom) edge to fraction f of work area a.
+    // resizeByPixels counts in full screen pixels, tiles in the work area.
+    function setTileEdge(t, edge, f, a, output) {
+        const g = t.absoluteGeometry;
+        if (edge === Qt.RightEdge) {
+            const cur = (g.x + g.width - a.x) / a.width;
+            t.resizeByPixels((f - cur) * output.geometry.width, Qt.RightEdge);
+        } else {
+            const cur = (g.y + g.height - a.y) / a.height;
+            t.resizeByPixels((f - cur) * output.geometry.height, Qt.BottomEdge);
+        }
+    }
+
+    // Lay out KDE's custom tiles on the slots' screen to match the slots
+    // (columns, or quarters), unless they already do, and give every slot
+    // its tile. Replaces the tile editor's layout on that screen. Without
+    // tiles the slots are filled by geometry, as before.
+    function attachTiles(slots) {
+        const output = slots[0].output;
+        const root = output ? customRoot(output) : null;
+        if (!root || !root.split) {
+            log("no KDE custom tiles here, placing by geometry");
+            return;
+        }
+        let tiles = tilesForSlots(root, slots);
+        if (!tiles) {
+            const a = workArea(output);
+            const horizontal = 1, vertical = 2; // KWin::Tile::LayoutDirection
+            const kids = (root.tiles || []).slice();
+            for (let i = 0; i < kids.length; i++)
+                kids[i].remove();
+            // Distinct column edges and row edges of the slots, as fractions.
+            const xs = [], ys = [];
+            for (let i = 0; i < slots.length; i++) {
+                const r = slots[i].rect;
+                const fx = Math.round((r.x + r.width - a.x) / a.width * 1000) / 1000;
+                const fy = Math.round((r.y + r.height - a.y) / a.height * 1000) / 1000;
+                if (fx < 0.999 && xs.indexOf(fx) < 0)
+                    xs.push(fx);
+                if (fy < 0.999 && ys.indexOf(fy) < 0)
+                    ys.push(fy);
+            }
+            xs.sort(function(p, q) { return p - q; });
+            // Columns: split the root, then keep splitting the last column.
+            // The new tiles are read back from .tiles, in layout order.
+            root.split(horizontal);
+            for (let guard = 0; root.tiles.length < xs.length + 1 && guard < 8; guard++)
+                root.tiles[root.tiles.length - 1].split(horizontal);
+            const cols = root.tiles.slice();
+            for (let i = 0; i < xs.length && i < cols.length; i++)
+                setTileEdge(cols[i], Qt.RightEdge, xs[i], a, output);
+            // Rows (quarters): split every column once.
+            if (ys.length === 1) {
+                for (let i = 0; i < cols.length; i++) {
+                    cols[i].split(vertical);
+                    if (cols[i].tiles.length > 0)
+                        setTileEdge(cols[i].tiles[0], Qt.BottomEdge, ys[0], a, output);
+                }
+            }
+            tiles = tilesForSlots(root, slots);
+            log("KDE tiles laid out: " + (tiles ? "ok" : "no match, placing by geometry"));
+            if (!tiles)
+                return;
+        }
+        for (let i = 0; i < slots.length; i++)
+            slots[i].tile = tiles[i];
+    }
+
+    // A custom tile (KDE's tile editor) has a layout direction; a quick tile
+    // (edge drag, Meta+arrows) does not.
+    function isQuickTiled(w) {
+        return !!w.tile && w.tile.layoutDirection === undefined;
+    }
+
+    // Make n a KDE quick tile on its side (if it is not one already) and
+    // move KDE's split to n's current inner edge. A window quick tiled on
+    // the other side then fills exactly the rest, and the two share KDE's
+    // resize handle, like two halves do. side: where the new window goes.
+    // Returns false if n is in a custom tile; that is left alone.
+    function tileNeighbour(n, side) {
+        if (n.tile && !isQuickTiled(n))
+            return false;
+        const nSide = side === "left" ? "right" : "left";
+        const g = n.frameGeometry;
+        if (!n.tile) {
+            Workspace.activeWindow = n;
+            if (nSide === "right")
+                Workspace.slotWindowQuickTileRight();
+            else
+                Workspace.slotWindowQuickTileLeft();
+        }
+        const t = n.tile;
+        if (!t) {
+            log("could not quick tile '" + n.caption + "'");
+            return false;
+        }
+        const pad = t.padding || 0;
+        const tg = t.absoluteGeometry;
+        // Tile geometry is laid out in the work area, but resizeByPixels
+        // counts in the full screen width; scale so a side panel does not
+        // throw the split off.
+        const scale = n.output.geometry.width / Math.max(1, workArea(n.output).width);
+        let delta = 0;
+        if (nSide === "right") {
+            delta = (g.x - pad) - tg.x;
+            if (Math.abs(delta) > 1)
+                t.resizeByPixels(delta * scale, Qt.LeftEdge);
+        } else {
+            delta = (g.x + g.width + pad) - (tg.x + tg.width);
+            if (Math.abs(delta) > 1)
+                t.resizeByPixels(delta * scale, Qt.RightEdge);
+        }
+        log("quick tiled '" + n.caption + "' " + nSide + ", split moved by " + Math.round(delta) + " px");
+        return true;
+    }
+
+    function endDrag() {
+        maximizeArmed = false;
+        bar.hide();
+        outline.hide();
+    }
+
+    function dragFinished(w) {
+        const id = w.internalId.toString();
+        const wasMove = root.moveStarted[id];
+        delete root.moveStarted[id];
+        if (!wasMove)
+            return;
+        if (bar.visible && bar.hoveredSlot >= 0) {
+            const li = bar.hoveredLayout;
+            const si = bar.hoveredSlot;
+            const others = [];
+            for (let i = 0; i < bar.layouts[li].length; i++) {
+                if (i !== si)
+                    others.push(bar.slot(li, i));
+            }
+            root.pendingDrop = { "window": w, "slot": bar.slot(li, si), "others": others, "bar": true };
+            dropTimer.restart();
+        } else if (root.maximizeArmed) {
+            // Maximize on the screen the preview showed: the cursor's.
+            root.pendingDrop = { "window": w, "maximize": true,
+                                 "output": screenAt(Workspace.cursorPos) || w.output };
+            dropTimer.restart();
+        } else if (edgeArmed) {
+            root.pendingDrop = { "window": w, "slot": edgeArmed.slot, "others": edgeArmed.others,
+                                 "edge": true };
+            dropTimer.restart();
+        } else {
+            root.pendingWindow = w;
+            settleTimer.restart();
+        }
+        edgeArmed = null;
+        endDrag();
+    }
+
+    Instantiator {
+        model: root.watched
+        delegate: Connections {
+            required property var modelData
+            target: modelData
+            function onInteractiveMoveResizeStarted() {
+                root.dragStarted(modelData);
+            }
+            function onInteractiveMoveResizeStepped() {
+                root.dragStepped(modelData);
+            }
+            function onInteractiveMoveResizeFinished() {
+                root.dragFinished(modelData);
+            }
+            function onTileChanged() {
+                root.noteQuickTile(modelData);
+            }
+        }
+    }
+
+    // Give KWin a moment to finish applying the quick tile geometry.
+    Timer {
+        id: settleTimer
+        interval: 200
+        onTriggered: {
+            const w = root.pendingWindow;
+            root.pendingWindow = null;
+            if (w)
+                root.checkSnapped(w);
+        }
+    }
+
+    // Apply a bar drop once KWin has finished the move; setting geometry
+    // inside the finished signal can be overridden by the move itself.
+    Timer {
+        id: dropTimer
+        interval: 50
+        onTriggered: {
+            const d = root.pendingDrop;
+            root.pendingDrop = null;
+            if (!d)
+                return;
+            if (d.maximize) {
+                root.log("maximizing '" + d.window.caption + "'");
+                if (d.window.tile)
+                    d.window.tile = null;
+                root.moveToScreen(d.window, d.output);
+                d.window.setMaximize(true, true);
+                return;
+            }
+            // A bar layout other than halves: lay out KDE's custom tiles
+            // like it, so the windows share resize borders.
+            if (d.bar && !d.slot.quickTile && cfg.kdeTiles)
+                root.attachTiles([d.slot].concat(d.others));
+            // Filling the space next to a snapped window: tile that window
+            // first, so the new one lands in the matching quick tile. If
+            // that is not possible, just put the new window in the gap.
+            if (d.slot.neighbour && !root.tileNeighbour(d.slot.neighbour, d.slot.quickTile))
+                d.slot = { "rect": d.slot.rect, "quickTile": "", "output": d.slot.output };
+            root.place(d.window, d.slot);
+            if (d.edge ? cfg.edgeAssist : cfg.assistAfterBarDrop)
+                root.startAssist(d.others, [d.window]);
+        }
+    }
+
+    // Delay between filling one slot and offering windows for the next.
+    Timer {
+        id: assistNextTimer
+        interval: 150
+        onTriggered: root.assistNext()
+    }
+
+    // Self test (also used to stage screenshots): on the largest screen,
+    // show the bar hovering the middle third, then snap the topmost window
+    // there to the left half and open the picker on the right, then close.
+    function selfTestScreen() {
+        const demo = demoClasses.length > 0;
+        const screens = Workspace.screens;
+        let best = screens[0];
+        for (let i = 1; i < screens.length; i++) {
+            const a = screens[i].geometry.width * screens[i].geometry.height;
+            const b = best.geometry.width * best.geometry.height;
+            if (demo ? a < b : a > b)
+                best = screens[i];
+        }
+        return best;
+    }
+
+    function isDemoWindow(w) {
+        return demoClasses.indexOf(w.resourceClass.toString()) >= 0;
+    }
+
+    function selfTestCandidates(excluded) {
+        const all = candidatesFor(excluded, null);
+        return demoClasses.length > 0 ? all.filter(isDemoWindow) : all;
+    }
+
+    // Demo: a tidy scene on the demo screen. Two windows side by side in
+    // the background, the first demo class floating at the top center as if
+    // it was being dragged there; the rest stay behind.
+    function arrangeDemo() {
+        const out = selfTestScreen();
+        const a = workArea(out);
+        const h = halves(a, out);
+        const wins = selfTestCandidates([]);
+        const byClass = {};
+        for (let i = 0; i < wins.length; i++) {
+            const w = wins[i];
+            if (w.tile)
+                w.tile = null;
+            w.setMaximize(false, false);
+            w.minimized = false;
+            w.frameGeometry = Qt.rect(a.x + 80 + i * 40, a.y + 80 + i * 40,
+                                      Math.round(a.width * 0.45), Math.round(a.height * 0.6));
+            byClass[w.resourceClass.toString()] = w;
+        }
+        const left = byClass["org.kde.kate"];
+        const right = byClass["org.kde.dolphin"];
+        const front = byClass[demoClasses[0]];
+        if (left) {
+            left.frameGeometry = h.left;
+            Workspace.activeWindow = left;
+        }
+        if (right) {
+            right.frameGeometry = h.right;
+            Workspace.activeWindow = right;
+        }
+        if (front) {
+            const fw = Math.round(a.width * 0.5);
+            const fh = Math.round(a.height * 0.55);
+            front.frameGeometry = Qt.rect(a.x + Math.round((a.width - fw) / 2), a.y + 110, fw, fh);
+            Workspace.activeWindow = front;
+        }
+        log("demo: arranged " + wins.length + " windows on " + out.name);
+    }
+
+    Timer {
+        id: selfTestTimer
+        interval: 500
+        onTriggered: {
+            const out = root.selfTestScreen();
+            if (root.demoClasses.length > 0)
+                root.arrangeDemo();
+            root.log("self test on " + out.name + ": bar");
+            bar.showOn(root.workArea(out), out);
+            bar.expanded = true;
+            bar.hoveredLayout = bar.layouts.length - 1;
+            bar.hoveredSlot = Math.min(1, bar.layouts[bar.hoveredLayout].length - 1);
+            outline.showAt(bar.slotRect(bar.hoveredLayout, bar.hoveredSlot), root.workArea(out), null);
+            bar.bringToFront();
+            selfTestAssistTimer.start();
+        }
+    }
+
+    Timer {
+        id: selfTestAssistTimer
+        interval: 4000
+        onTriggered: {
+            root.log("self test: assist");
+            bar.hide();
+            outline.hide();
+            const out = root.selfTestScreen();
+            const h = root.halves(root.workArea(out), out);
+            const all = root.selfTestCandidates([]);
+            // Demo: the first demo class goes left; otherwise the topmost
+            // window on that screen.
+            let anchor = null;
+            for (let i = 0; i < all.length && !anchor; i++) {
+                const ok = root.demoClasses.length > 0
+                    ? all[i].resourceClass.toString() === root.demoClasses[0]
+                    : all[i].output === out;
+                if (ok && !all[i].minimized)
+                    anchor = all[i];
+            }
+            // Only the demo moves windows; the plain self test leaves the
+            // user's windows alone.
+            if (anchor && root.demoClasses.length > 0)
+                root.place(anchor, { "rect": h.left, "quickTile": "left" });
+            selfTestAssistOpenTimer.anchor = anchor;
+            selfTestAssistOpenTimer.start();
+        }
+    }
+
+    // Open the picker once the snapped window has settled.
+    Timer {
+        id: selfTestAssistOpenTimer
+        property var anchor: null
+        interval: 400
+        onTriggered: {
+            const h = root.halves(root.workArea(root.selfTestScreen()), root.selfTestScreen());
+            root.openAssist({ "rect": h.right, "quickTile": "right", "output": root.selfTestScreen() },
+                        root.selfTestCandidates(anchor ? [anchor] : []));
+            assist.currentIndex = 0; // show the hover look
+            selfTestEndTimer.start();
+        }
+    }
+
+    Timer {
+        id: selfTestEndTimer
+        interval: 4000
+        onTriggered: assist.dismiss("self test over")
+    }
+
+    Config {
+        id: cfg
+    }
+
+    // KWin does not notify a running script when its own settings page is
+    // applied (the scripted settings KCM only reloads effects), so poll the
+    // config a few times per second; dragStarted() also reloads it before use.
+    // Config.changed (fired only on a real change) drives the live refresh.
+    Timer {
+        interval: 200
+        repeat: true
+        running: true
+        onTriggered: cfg.load()
+    }
+
+    Connections {
+        target: cfg
+        function onChanged() {
+            root.log("config change applied");
+            // The bar's width is bound to the layouts, but its position is set
+            // imperatively, so re-center it when the options change mid-drag.
+            if (bar.visible)
+                bar.place();
+        }
+    }
+
+    // The overlays, by name (the preview harness in tools/preview uses these).
+    readonly property alias layoutBar: bar
+    readonly property alias dropPreview: outline
+    readonly property alias snapAssist: assist
+    readonly property alias clickCatcher: catcher
+
+    // Windows 11 look for every overlay; follows the system's light/dark
+    // scheme and accent color.
+    readonly property alias fluent: fluentTokens
+
+    Fluent {
+        id: fluentTokens
+    }
+
+    LayoutBar {
+        id: bar
+        cfg: cfg
+        fluent: fluentTokens
+    }
+
+    ClickCatcher {
+        id: catcher
+        onClicked: function(pos) { root.catcherClicked(pos); }
+    }
+
+    SlotOutline {
+        id: outline
+        cfg: cfg
+        fluent: fluentTokens
+    }
+
+    SnapAssist {
+        id: assist
+        cfg: cfg
+        fluent: fluentTokens
+        onPicked: function(w, slot) { root.assistPicked(w, slot); }
+        onVisibleChanged: root.assistVisibleChanged(visible)
+    }
+
+    function assistPicked(w, slot) {
+        assist.dismiss();
+        place(w, slot);
+        assistPlaced = assistPlaced.concat([w]);
+        if (assistQueue.length > 0)
+            assistNextTimer.restart();
+    }
+
+    // Empty zones still to fill, shown while Snap Assist fills another one.
+    Instantiator {
+        id: placeholderList
+        model: 3
+        delegate: ZonePlaceholder {
+            fluent: fluentTokens
+        }
+    }
+
+    readonly property alias placeholders: placeholderList
+
+    function showPlaceholders(slots) {
+        for (let i = 0; i < placeholderList.count; i++) {
+            const ph = placeholderList.objectAt(i);
+            if (i < slots.length)
+                ph.show(slots[i], workArea(slots[i].output));
+            else
+                ph.hide();
+        }
+    }
+
+    function hidePlaceholders() {
+        showPlaceholders([]);
+    }
+
+    // Show the click catcher first, then the placeholders, so the picker
+    // (shown last) is stacked above them.
+    function openAssist(slot, cands, rest) {
+        catcher.showAll();
+        try {
+            showPlaceholders(rest || []);
+            assist.open(slot, cands);
+        } catch (e) {
+            console.info("snap11: opening Snap Assist failed: " + e);
+        }
+        // Never leave the invisible click catcher up without the picker:
+        // it would swallow every click on the desktop.
+        if (!assist.visible) {
+            catcher.hide();
+            hidePlaceholders();
+        }
+    }
+
+    // A click outside the picker: close it, stop the chain, and give the
+    // click's target window the focus, as the click itself was swallowed.
+    function catcherClicked(pos) {
+        assist.dismiss("clicked elsewhere");
+        root.assistQueue = [];
+        const stack = Workspace.stackingOrder;
+        for (let i = stack.length - 1; i >= 0; i--) {
+            const w = stack[i];
+            const g = w.frameGeometry;
+            if (!isNormal(w) || w.minimized || w.pid <= 0 || !onCurrentDesktop(w))
+                continue;
+            if (pos.x >= g.x && pos.x < g.x + g.width && pos.y >= g.y && pos.y < g.y + g.height) {
+                Workspace.activeWindow = w;
+                break;
+            }
+        }
+    }
+
+    // Closed without picking (Escape, click outside): stop the chain.
+    function assistVisibleChanged(visible) {
+        if (!visible)
+            catcher.hide();
+        if (!visible && !assistNextTimer.running)
+            Qt.callLater(function() {
+                if (!assist.visible && !assistNextTimer.running) {
+                    root.assistQueue = [];
+                    root.hidePlaceholders();
+                }
+            });
+    }
+
+    Connections {
+        target: Workspace
+        function onWindowAdded(w) {
+            root.refreshWatched();
+        }
+        function onWindowRemoved(w) {
+            delete root.presnap[w.internalId.toString()];
+            root.refreshWatched();
+        }
+        function onWindowActivated(w) {
+            root.windowActivated(w);
+        }
+    }
+
+    // A click anywhere else (another window, the desktop) activates that
+    // window: close the picker and stop filling further slots. The picker
+    // often never gets focus itself, so its own focus-out cannot be relied
+    // on. Right after opening, KWin may still re-activate the dragged
+    // window, hence the grace period.
+    function windowActivated(w) {
+        if (!assist.visible)
+            return;
+        if (w && w.pid <= 0)
+            return; // one of our own overlays
+        if (Date.now() - assist.openedAt < assist.focusGraceMs
+                || Date.now() < assist.ignoreActivationUntil)
+            return;
+        assist.dismiss("clicked elsewhere");
+    }
+
+    // Re-read the options when they are changed in System Settings; that
+    // is also when KDE's own edge options may have been switched.
+    Connections {
+        target: Options
+        function onConfigChanged() {
+            cfg.load();
+            root.log("options reloaded");
+        }
+    }
+
+    Component.onCompleted: {
+        cfg.load();
+        refreshWatched();
+        log("loaded, watching " + watched.length + " windows");
+        if (selfTest)
+            selfTestTimer.start();
+    }
+}

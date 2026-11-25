@@ -1,0 +1,31 @@
+{
+    "KPackageStructure": "KWin/Script",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "KairikiFedora",
+                "Email": "13278297951@sina.cn"
+            }
+        ],
+        "Category": "Window Management",
+        "Description": "Windows 11 style window snapping: Snap Assist with window thumbnails and a snap layout bar at the top edge",
+        "Description[de]": "Windows 11-Stil Fenster-Snapping: Snap Assist mit Fensterminiaturansichten und einer Snap-Layout-Leiste am oberen Bildschirmrand",
+        "Description[fr]": "Alignement des fenêtres de style Windows 11 : Snap Assist avec des miniatures de fenêtres et une barre de disposition Snap au bord supérieur",
+        "Description[ja]": "Windows 11 スタイルのウィンドウスナップ：ウィンドウサムネイル付きの Snap Assist と画面上端のスナップレイアウトバー",
+        "Description[ko]": "Windows 11 스타일 창 스냅: 창 섬네일이 있는 Snap Assist와 화면 위쪽 가장자리의 스냅 레이아웃 막대",
+        "Description[zh_CN]": "Windows 11 风格的窗口吸附：含窗口缩略图的 Snap Assist 与顶部边缘的吸附布局栏",
+        "Description[zh_TW]": "Windows 11 風格的視窗貼齊：含視窗縮圖的 Snap Assist 與頂部邊緣的貼齊版面配置列",
+        "EnabledByDefault": false,
+        "Icon": "preferences-system-windows-effect",
+        "Id": "org.miryugaming.snap11",
+        "License": "MIT",
+        "Name": "Miryu Snap11",
+        "Version": "45.0.0"
+    },
+    "X-Plasma-API": "declarativescript",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-MainScript": "ui/main.qml",
+    "X-KDE-ConfigModule": "kwin/effects/configs/kcm_kwin4_genericscripted",
+    "X-KDE-PluginKeyword": "org.miryugaming.snap11",
+    "X-KWin-Config-TranslationDomain": "org.miryugaming.snap11"
+}

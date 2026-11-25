@@ -1,0 +1,160 @@
+# German translation for Snap11.
+# SPDX-License-Identifier: MIT
+msgid ""
+msgstr ""
+"Project-Id-Version: snap11\n"
+"POT-Creation-Date: 2026-11-24 20:30+0800\n"
+"PO-Revision-Date: 2026-11-24 20:30+0800\n"
+"Last-Translator: Snap11 contributors\n"
+"Language-Team: German\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: miryu-snap11/contents/ui/config.ui:10
+msgid "Behavior"
+msgstr "Verhalten"
+
+#: miryu-snap11/contents/ui/config.ui:14
+msgid ""
+"Important: turn off KDE's own edge snapping, or both will show. System Settings > Screen Edges: turn off \"Maximize: Drag windows to top edge\" and \"Tile: Drag windows to the left or right edge\"."
+msgstr ""
+"Wichtig: Deaktivieren Sie das eigene Einrasten an Bildschirmrändern von KDE, da sonst beide angezeigt werden. Systemeinstellungen > Bildschirmränder: Deaktivieren Sie \"Maximieren: Fenster an den oberen Bildschirmrand ziehen\" und \"Kacheln: Fenster an den linken oder rechten Bildschirmrand ziehen\"."
+
+#: miryu-snap11/contents/ui/config.ui:23
+msgid "Snap Assist after edge snapping"
+msgstr "Snap Assist nach dem Einrasten am Bildschirmrand"
+
+#: miryu-snap11/contents/ui/config.ui:27
+msgid "Drag a window to the left or right screen edge. The other windows then show up as thumbnails in the free half."
+msgstr "Ziehen Sie ein Fenster an den linken oder rechten Bildschirmrand. Die anderen Fenster werden dann als Miniaturansichten in der freien Hälfte angezeigt."
+
+#: miryu-snap11/contents/ui/config.ui:36
+msgid "Edge snapping"
+msgstr "Einrasten am Bildschirmrand"
+
+#: miryu-snap11/contents/ui/config.ui:40
+msgid "Snap11 snaps windows dragged to the left or right screen edge itself, with its own outline. For that, turn off KDE's own edge tiling (System Settings > Screen Edges), or both will show."
+msgstr "Snap11 lässt Fenster, die an den linken oder rechten Bildschirmrand gezogen werden, selbst mit einer eigenen Kontur einrasten. Deaktivieren Sie dafür das eigene Kacheln von KDE (Systemeinstellungen > Bildschirmränder), da sonst beide angezeigt werden."
+
+#: miryu-snap11/contents/ui/config.ui:48
+msgid "Snap at the outer screen edges"
+msgstr "An den äußeren Bildschirmrändern einrasten"
+
+#: miryu-snap11/contents/ui/config.ui:53
+msgid "Snap at the edges between monitors"
+msgstr "An den Rändern zwischen Monitoren einrasten"
+
+#: miryu-snap11/contents/ui/config.ui:58
+msgid "Snap to a quarter near the corners"
+msgstr "In der Nähe von Ecken auf ein Viertel einrasten"
+
+#: miryu-snap11/contents/ui/config.ui:63
+msgid "Next to a snapped window, fill the space that is left"
+msgstr "Neben einem eingerasteten Fenster den verbleibenden Platz ausfüllen"
+
+#: miryu-snap11/contents/ui/config.ui:68
+msgid "Snap zone width:"
+msgstr "Breite der Einrastzone:"
+
+#: miryu-snap11/contents/ui/config.ui:75
+msgid " px"
+msgstr " px"
+
+#: miryu-snap11/contents/ui/config.ui:80
+msgid "Restore a window's size when you drag it out of a snap"
+msgstr "Größe eines Fensters wiederherstellen, wenn es aus einer Einrastposition gezogen wird"
+
+#: miryu-snap11/contents/ui/config.ui:91
+msgid "Snap layout bar at the top edge"
+msgstr "Snap-Layout-Leiste am oberen Bildschirmrand"
+
+#: miryu-snap11/contents/ui/config.ui:95
+msgid "Like Windows 11: when you drag a window, a small bar slides in at the top of the screen. Drag the window onto it to see the layouts, and drop it on the zone where it should go."
+msgstr "Wie bei Windows 11: Beim Ziehen eines Fensters wird oben auf dem Bildschirm eine kleine Leiste eingeblendet. Ziehen Sie das Fenster darauf, um die Layouts anzuzeigen, und legen Sie es in der gewünschten Zone ab."
+
+#: miryu-snap11/contents/ui/config.ui:103
+msgid "50 / 50"
+msgstr "50 / 50"
+
+#: miryu-snap11/contents/ui/config.ui:108
+msgid "66 / 33"
+msgstr "66 / 33"
+
+#: miryu-snap11/contents/ui/config.ui:113
+msgid "33 / 33 / 33"
+msgstr "33 / 33 / 33"
+
+#: miryu-snap11/contents/ui/config.ui:118
+msgid "50 + two quarters"
+msgstr "50 + zwei Viertel"
+
+#: miryu-snap11/contents/ui/config.ui:123
+msgid "Quarters"
+msgstr "Viertel"
+
+#: miryu-snap11/contents/ui/config.ui:128
+msgid "25 / 50 / 25"
+msgstr "25 / 50 / 25"
+
+#: miryu-snap11/contents/ui/config.ui:133
+msgid "33 / 66 (not in Windows)"
+msgstr "33 / 66 (nicht in Windows)"
+
+#: miryu-snap11/contents/ui/config.ui:138
+msgid "Three-column layouts only on wide screens (1920 px and up), like Windows"
+msgstr "Dreispaltige Layouts wie in Windows nur auf breiten Bildschirmen (ab 1920 px)"
+
+#: miryu-snap11/contents/ui/config.ui:143
+msgid "Offer windows for the other zones afterwards"
+msgstr "Anschließend Fenster für die anderen Zonen anbieten"
+
+#: miryu-snap11/contents/ui/config.ui:148
+msgid "Use KDE's tiles, so windows share resize borders (replaces the tile editor's layout on that screen)"
+msgstr "KDE-Kacheln verwenden, damit Fenster gemeinsame Größenänderungsränder nutzen (ersetzt das Layout des Kacheleditors auf diesem Bildschirm)"
+
+#: miryu-snap11/contents/ui/config.ui:158
+msgid "Top edge"
+msgstr "Oberer Bildschirmrand"
+
+#: miryu-snap11/contents/ui/config.ui:164
+msgid "Maximize when dropped at the top edge"
+msgstr "Beim Ablegen am oberen Bildschirmrand maximieren"
+
+#: miryu-snap11/contents/ui/config.ui:169
+msgid "Trigger distance from the top edge:"
+msgstr "Auslöseabstand vom oberen Bildschirmrand:"
+
+#: miryu-snap11/contents/ui/config.ui:186
+msgid "Window picker"
+msgstr "Fensterauswahl"
+
+#: miryu-snap11/contents/ui/config.ui:192
+msgid "Include minimized windows"
+msgstr "Minimierte Fenster einschließen"
+
+#: miryu-snap11/contents/ui/config.ui:197
+msgid "Only windows from the same screen"
+msgstr "Nur Fenster desselben Bildschirms"
+
+#: miryu-snap11/contents/ui/config.ui:213
+msgid "Appearance"
+msgstr "Erscheinungsbild"
+
+#: miryu-snap11/contents/ui/config.ui:217
+msgid "Sizes"
+msgstr "Größen"
+
+#: miryu-snap11/contents/ui/config.ui:221
+msgid "Snap11 looks like Windows 11. Light or dark and the accent color follow your system settings, like in Windows."
+msgstr "Snap11 sieht wie Windows 11 aus. Helles oder dunkles Design und Akzentfarbe folgen wie bei Windows Ihren Systemeinstellungen."
+
+#: miryu-snap11/contents/ui/config.ui:229
+msgid "Layout width in the snap bar:"
+msgstr "Layoutbreite in der Snap-Leiste:"
+
+#: miryu-snap11/contents/ui/config.ui:241
+msgid "Maximum thumbnail width in Snap Assist:"
+msgstr "Maximale Miniaturansichtsbreite in Snap Assist:"

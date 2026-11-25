@@ -1,0 +1,160 @@
+# Traditional Chinese translation for Snap11.
+# SPDX-License-Identifier: MIT
+msgid ""
+msgstr ""
+"Project-Id-Version: snap11\n"
+"POT-Creation-Date: 2026-11-24 20:30+0800\n"
+"PO-Revision-Date: 2026-11-24 20:30+0800\n"
+"Last-Translator: Snap11 contributors\n"
+"Language-Team: Traditional Chinese\n"
+"Language: zh_TW\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: miryu-snap11/contents/ui/config.ui:10
+msgid "Behavior"
+msgstr "行為"
+
+#: miryu-snap11/contents/ui/config.ui:14
+msgid ""
+"Important: turn off KDE's own edge snapping, or both will show. System Settings > Screen Edges: turn off \"Maximize: Drag windows to top edge\" and \"Tile: Drag windows to the left or right edge\"."
+msgstr ""
+"重要：請關閉 KDE 內建的螢幕邊緣貼齊，否則兩者的預覽都會顯示。在「系統設定 > 螢幕邊緣」中，關閉「最大化：將視窗拖曳到頂部邊緣」和「並排：將視窗拖曳到左側或右側邊緣」。"
+
+#: miryu-snap11/contents/ui/config.ui:23
+msgid "Snap Assist after edge snapping"
+msgstr "邊緣貼齊後顯示 Snap Assist"
+
+#: miryu-snap11/contents/ui/config.ui:27
+msgid "Drag a window to the left or right screen edge. The other windows then show up as thumbnails in the free half."
+msgstr "將視窗拖曳到螢幕左側或右側邊緣，其他視窗會以縮圖顯示在空出的另一半螢幕中。"
+
+#: miryu-snap11/contents/ui/config.ui:36
+msgid "Edge snapping"
+msgstr "邊緣貼齊"
+
+#: miryu-snap11/contents/ui/config.ui:40
+msgid "Snap11 snaps windows dragged to the left or right screen edge itself, with its own outline. For that, turn off KDE's own edge tiling (System Settings > Screen Edges), or both will show."
+msgstr "Snap11 會使用自己的外框，將拖曳到螢幕左側或右側邊緣的視窗貼齊定位。請關閉 KDE 內建的邊緣並排（系統設定 > 螢幕邊緣），否則兩者的預覽都會顯示。"
+
+#: miryu-snap11/contents/ui/config.ui:48
+msgid "Snap at the outer screen edges"
+msgstr "貼齊螢幕外側邊緣"
+
+#: miryu-snap11/contents/ui/config.ui:53
+msgid "Snap at the edges between monitors"
+msgstr "貼齊顯示器之間的邊緣"
+
+#: miryu-snap11/contents/ui/config.ui:58
+msgid "Snap to a quarter near the corners"
+msgstr "在角落附近貼齊為螢幕的四分之一"
+
+#: miryu-snap11/contents/ui/config.ui:63
+msgid "Next to a snapped window, fill the space that is left"
+msgstr "填滿已貼齊視窗旁的剩餘空間"
+
+#: miryu-snap11/contents/ui/config.ui:68
+msgid "Snap zone width:"
+msgstr "貼齊區域寬度："
+
+#: miryu-snap11/contents/ui/config.ui:75
+msgid " px"
+msgstr " px"
+
+#: miryu-snap11/contents/ui/config.ui:80
+msgid "Restore a window's size when you drag it out of a snap"
+msgstr "將視窗拖離貼齊位置時還原其大小"
+
+#: miryu-snap11/contents/ui/config.ui:91
+msgid "Snap layout bar at the top edge"
+msgstr "頂部邊緣的貼齊版面配置列"
+
+#: miryu-snap11/contents/ui/config.ui:95
+msgid "Like Windows 11: when you drag a window, a small bar slides in at the top of the screen. Drag the window onto it to see the layouts, and drop it on the zone where it should go."
+msgstr "與 Windows 11 類似：拖曳視窗時，螢幕頂部會滑入一個小工具列。將視窗拖到該工具列上即可檢視版面配置，再放到目標區域。"
+
+#: miryu-snap11/contents/ui/config.ui:103
+msgid "50 / 50"
+msgstr "50 / 50"
+
+#: miryu-snap11/contents/ui/config.ui:108
+msgid "66 / 33"
+msgstr "66 / 33"
+
+#: miryu-snap11/contents/ui/config.ui:113
+msgid "33 / 33 / 33"
+msgstr "33 / 33 / 33"
+
+#: miryu-snap11/contents/ui/config.ui:118
+msgid "50 + two quarters"
+msgstr "50 + 兩個四分之一區域"
+
+#: miryu-snap11/contents/ui/config.ui:123
+msgid "Quarters"
+msgstr "四分之一區域"
+
+#: miryu-snap11/contents/ui/config.ui:128
+msgid "25 / 50 / 25"
+msgstr "25 / 50 / 25"
+
+#: miryu-snap11/contents/ui/config.ui:133
+msgid "33 / 66 (not in Windows)"
+msgstr "33 / 66（Windows 沒有此配置）"
+
+#: miryu-snap11/contents/ui/config.ui:138
+msgid "Three-column layouts only on wide screens (1920 px and up), like Windows"
+msgstr "與 Windows 一樣，僅在寬螢幕（1920 px 以上）使用三欄配置"
+
+#: miryu-snap11/contents/ui/config.ui:143
+msgid "Offer windows for the other zones afterwards"
+msgstr "接著為其他區域提供可選視窗"
+
+#: miryu-snap11/contents/ui/config.ui:148
+msgid "Use KDE's tiles, so windows share resize borders (replaces the tile editor's layout on that screen)"
+msgstr "使用 KDE 並排，讓視窗共用調整大小的邊界（取代該螢幕上並排編輯器的配置）"
+
+#: miryu-snap11/contents/ui/config.ui:158
+msgid "Top edge"
+msgstr "頂部邊緣"
+
+#: miryu-snap11/contents/ui/config.ui:164
+msgid "Maximize when dropped at the top edge"
+msgstr "放到頂部邊緣時最大化"
+
+#: miryu-snap11/contents/ui/config.ui:169
+msgid "Trigger distance from the top edge:"
+msgstr "距頂部邊緣的觸發距離："
+
+#: miryu-snap11/contents/ui/config.ui:186
+msgid "Window picker"
+msgstr "視窗選擇器"
+
+#: miryu-snap11/contents/ui/config.ui:192
+msgid "Include minimized windows"
+msgstr "包含已最小化的視窗"
+
+#: miryu-snap11/contents/ui/config.ui:197
+msgid "Only windows from the same screen"
+msgstr "僅顯示同一螢幕上的視窗"
+
+#: miryu-snap11/contents/ui/config.ui:213
+msgid "Appearance"
+msgstr "外觀"
+
+#: miryu-snap11/contents/ui/config.ui:217
+msgid "Sizes"
+msgstr "大小"
+
+#: miryu-snap11/contents/ui/config.ui:221
+msgid "Snap11 looks like Windows 11. Light or dark and the accent color follow your system settings, like in Windows."
+msgstr "Snap11 的外觀與 Windows 11 相似。淺色或深色模式及強調色會像 Windows 一樣跟隨系統設定。"
+
+#: miryu-snap11/contents/ui/config.ui:229
+msgid "Layout width in the snap bar:"
+msgstr "貼齊列中的版面配置寬度："
+
+#: miryu-snap11/contents/ui/config.ui:241
+msgid "Maximum thumbnail width in Snap Assist:"
+msgstr "Snap Assist 中縮圖的最大寬度："
